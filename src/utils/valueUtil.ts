@@ -1,7 +1,7 @@
-import get from 'rc-util/lib/utils/get';
-import set from 'rc-util/lib/utils/set';
 import type { InternalNamePath, NamePath, Store, StoreValue, EventArgs } from '../interface';
 import { toArray } from './typeUtil';
+import { action, set as oset, keys, isObservable } from 'mobx';
+import { set as lset } from 'lodash';
 
 /**
  * Convert name to internal supported format.
@@ -15,19 +15,49 @@ export function getNamePath(path: NamePath | null): InternalNamePath {
 }
 
 export function getValue(store: Store, namePath: InternalNamePath) {
-  const value = get(store, namePath);
-  return value;
+  let current = store;
+  const _namePath = toArray(namePath);
+
+  for (let i = 0; i < _namePath.length; i += 1) {
+    if (current === null || current === undefined) {
+      break;
+    }
+
+    current = current[_namePath[i]];
+  }
+
+  return current;
 }
 
-export function setValue(
-  store: Store,
-  namePath: InternalNamePath,
-  value: StoreValue,
-  removeIfUndefined = false,
-): Store {
-  const newStore = set(store, namePath, value, removeIfUndefined);
-  return newStore;
-}
+export const setValue = action(
+  'setValue',
+  (store: Store, namePath: InternalNamePath, value: StoreValue): Store => {
+    const _namePath = toArray(namePath);
+    if (!_namePath.length) {
+      return value;
+    }
+    const [headPath, ...tailPath] = _namePath;
+
+    if (!store) {
+      if (typeof headPath === 'number') {
+        const clone = {};
+        clone[headPath] = setValue(null, tailPath, value);
+        return clone;
+      } else {
+        return {
+          [headPath]: setValue(null, tailPath, value),
+        };
+      }
+    } else if (typeof store === 'object') {
+      lset(store, headPath, setValue(store[headPath], tailPath, value));
+    } else {
+      return {
+        [headPath]: setValue(null, tailPath, value),
+      };
+    }
+    return store;
+  },
+);
 
 export function cloneByNamePathList(store: Store, namePathList: InternalNamePath[]): Store {
   let newStore = {};
@@ -51,24 +81,24 @@ function isObject(obj: StoreValue) {
  * Copy values into store and return a new values object
  * ({ a: 1, b: { c: 2 } }, { a: 4, b: { d: 5 } }) => { a: 4, b: { c: 2, d: 5 } }
  */
-function internalSetValues<T>(store: T, values: T): T {
-  const newStore: T = (Array.isArray(store) ? [...store] : { ...store }) as T;
-
+const internalSetValues = action('internalSetValues', <T>(store: T, values: T): T => {
   if (!values) {
-    return newStore;
+    return store;
   }
 
-  Object.keys(values).forEach(key => {
-    const prevValue = newStore[key];
+  const lkeys: any = isObservable(values) ? keys : Object.keys;
+
+  lkeys(values).forEach(key => {
+    const prevValue = store[key];
     const value = values[key];
 
-    // If both are object (but target is not array), we use recursion to set deep value
     const recursive = isObject(prevValue) && isObject(value);
-    newStore[key] = recursive ? internalSetValues(prevValue, value || {}) : value;
+    const set: any = isObservable(store) ? oset : lset;
+    set(store, key, recursive ? internalSetValues(prevValue, value || {}) : value);
   });
 
-  return newStore;
-}
+  return store;
+});
 
 export function setValues<T>(store: T, ...restValues: T[]): T {
   return restValues.reduce(
@@ -104,9 +134,9 @@ export function isSimilar(source: SimilarObject, target: SimilarObject) {
 
   const sourceKeys = Object.keys(source);
   const targetKeys = Object.keys(target);
-  const keys = new Set([...sourceKeys, ...targetKeys]);
+  const _keys = new Set([...sourceKeys, ...targetKeys]);
 
-  return [...keys].every(key => {
+  return [..._keys].every(key => {
     const sourceValue = source[key];
     const targetValue = target[key];
 

@@ -35,6 +35,7 @@ import {
   setValue,
   setValues,
 } from './utils/valueUtil';
+import { toJS, observable, isObservable } from 'mobx';
 
 type InvalidateFieldEntity = { INVALIDATE_NAME_PATH: InternalNamePath };
 
@@ -75,6 +76,8 @@ export class FormStore {
 
   constructor(forceRootUpdate: () => void) {
     this.forceRootUpdate = forceRootUpdate;
+
+    this.store = observable({});
   }
 
   public getForm = (): InternalFormInstance => ({
@@ -129,7 +132,7 @@ export class FormStore {
   private setInitialValues = (initialValues: Store, init: boolean) => {
     this.initialValues = initialValues || {};
     if (init) {
-      this.store = setValues({}, initialValues, this.store);
+      setValues(this.store, initialValues, this.store);
     }
   };
 
@@ -204,7 +207,7 @@ export class FormStore {
     this.warningUnhooked();
 
     if (nameList === true && !filterFunc) {
-      return this.store;
+      return toJS(this.store);
     }
 
     const fieldEntities = this.getFieldEntitiesForNamePathList(
@@ -232,14 +235,14 @@ export class FormStore {
       }
     });
 
-    return cloneByNamePathList(this.store, filteredNameList.map(getNamePath));
+    return cloneByNamePathList(toJS(this.store), filteredNameList.map(getNamePath));
   };
 
   private getFieldValue = (name: NamePath) => {
     this.warningUnhooked();
 
     const namePath: InternalNamePath = getNamePath(name);
-    return getValue(this.store, namePath);
+    return toJS(getValue(this.store, namePath));
   };
 
   private getFieldsError = (nameList?: NamePath[]) => {
@@ -425,7 +428,7 @@ export class FormStore {
               const originValue = this.getFieldValue(namePath);
               // Set `initialValue`
               if (!info.skipExist || originValue === undefined) {
-                this.store = setValue(this.store, namePath, [...records][0].value);
+                setValue(this.store, namePath, [...records][0].value);
               }
             }
           }
@@ -457,7 +460,7 @@ export class FormStore {
 
     const prevStore = this.store;
     if (!nameList) {
-      this.store = setValues({}, this.initialValues);
+      setValues(this.store, this.initialValues);
       this.resetWithFieldInitialValue();
       this.notifyObservers(prevStore, null, { type: 'reset' });
       return;
@@ -467,7 +470,7 @@ export class FormStore {
     const namePathList: InternalNamePath[] = nameList.map(getNamePath);
     namePathList.forEach(namePath => {
       const initialValue = this.getInitialValue(namePath);
-      this.store = setValue(this.store, namePath, initialValue);
+      setValue(this.store, namePath, initialValue);
     });
     this.resetWithFieldInitialValue({ namePathList });
     this.notifyObservers(prevStore, namePathList, { type: 'reset' });
@@ -484,7 +487,7 @@ export class FormStore {
 
       // Value
       if ('value' in data) {
-        this.store = setValue(this.store, namePath, data.value);
+        setValue(this.store, namePath, data.value);
       }
 
       this.notifyObservers(prevStore, [namePath], {
@@ -528,7 +531,7 @@ export class FormStore {
       const prevValue = getValue(this.store, namePath);
 
       if (prevValue === undefined) {
-        this.store = setValue(this.store, namePath, initialValue);
+        setValue(this.store, namePath, initialValue);
       }
     }
   };
@@ -568,7 +571,7 @@ export class FormStore {
           )
         ) {
           const prevStore = this.store;
-          this.store = setValue(prevStore, namePath, defaultValue, true);
+          setValue(prevStore, namePath, defaultValue, true);
 
           // Notify that field is unmount
           this.notifyObservers(prevStore, [namePath], { type: 'remove' });
@@ -636,7 +639,7 @@ export class FormStore {
   private updateValue = (name: NamePath, value: StoreValue) => {
     const namePath = getNamePath(name);
     const prevStore = this.store;
-    this.store = setValue(this.store, namePath, value);
+    setValue(this.store, namePath, value);
 
     this.notifyObservers(prevStore, [namePath], {
       type: 'valueUpdate',
@@ -664,9 +667,10 @@ export class FormStore {
     const prevStore = this.store;
 
     if (store) {
-      this.store = setValues(this.store, store);
+      setValues(this.store, store);
     }
 
+    console.log(isObservable(this.store), this.store, store);
     this.notifyObservers(prevStore, null, {
       type: 'valueUpdate',
       source: 'external',

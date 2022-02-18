@@ -35,7 +35,7 @@ import {
   setValue,
   setValues,
 } from './utils/valueUtil';
-import { toJS, observable, isObservable } from 'mobx';
+import { keys, toJS, observable } from 'mobx';
 
 type InvalidateFieldEntity = { INVALIDATE_NAME_PATH: InternalNamePath };
 
@@ -459,6 +459,11 @@ export class FormStore {
     this.warningUnhooked();
 
     const prevStore = this.store;
+
+    keys(this.store).forEach((key: string) => {
+      delete this.store[key];
+    });
+
     if (!nameList) {
       setValues(this.store, this.initialValues);
       this.resetWithFieldInitialValue();
@@ -670,7 +675,6 @@ export class FormStore {
       setValues(this.store, store);
     }
 
-    console.log(isObservable(this.store), this.store, store);
     this.notifyObservers(prevStore, null, {
       type: 'valueUpdate',
       source: 'external',
